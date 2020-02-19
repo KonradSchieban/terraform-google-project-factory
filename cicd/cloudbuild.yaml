@@ -1,0 +1,93 @@
+# Copyright 2020 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+substitutions:
+  _ORGANIZATION_ID: ''
+  _FOLDER_ID: ''
+  _BILLING_ACCOUNT: ''
+  _DEFAULT_SERVICE_ACCOUNT: 'delete'
+  _PROJECT_NAME: ''
+  _TERRAFORM_ADMIN_BUCKET: ''
+  _SECRETS_BUCKET: '' #GCS Bucket that stores SA key file
+  _PATH_TO_SA_JSON: '' #path to credentials file of service account inside bucket
+
+timeout: 2700s
+steps:
+  - id: 'fetch SA credentials'
+    waitFor: []
+    name: gcr.io/cloud-builders/gsutil
+    args:
+      - cp
+      - 'gs://${_SECRETS_BUCKET}/${_PATH_TO_SA_JSON}'
+      - 'credentials.json'
+
+  - id: 'Initialize Terraform'
+    name: 'hashicorp/terraform:0.12.20'
+    waitFor: ['fetch SA credentials']
+    entrypoint: 'sh'
+    env:
+      - TF_CREDS=/workspace/credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/workspace/credentials.json
+      - TF_VAR_organization_id=${_ORGANIZATION_ID}
+      - TF_VAR_folder_id=${_FOLDER_ID}
+      - TF_VAR_billing_account=${_BILLING_ACCOUNT}
+      - TF_VAR_default_service_account=${_DEFAULT_SERVICE_ACCOUNT}
+      - TF_VAR_project_name=${_PROJECT_NAME}
+      - TF_VAR_credentials_path=/workspace/credentials.json
+    args:
+      - '-c'
+      - |
+        cd examples/simple_project
+        terraform init
+
+  - id: 'Terraform Plan'
+    name: 'hashicorp/terraform:0.12.20'
+    waitFor: ['Initialize Terraform']
+    entrypoint: 'sh'
+    env:
+      - TF_CREDS=/workspace/credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/workspace/credentials.json
+      - TF_VAR_organization_id=${_ORGANIZATION_ID}
+      - TF_VAR_folder_id=${_FOLDER_ID}
+      - TF_VAR_billing_account=${_BILLING_ACCOUNT}
+      - TF_VAR_default_service_account=${_DEFAULT_SERVICE_ACCOUNT}
+      - TF_VAR_project_name=${_PROJECT_NAME}
+      - TF_VAR_credentials_path=/workspace/credentials.json
+
+    args:
+      - '-c'
+      - |
+        cd examples/simple_project
+        terraform plan
+
+  - id: 'Terraform Apply'
+    name: 'gcr.io/cloud-foundation-cicd/cft/developer-tools:0'
+    waitFor: ['Terraform Plan']
+    entrypoint: 'sh'
+    env:
+      - TF_CREDS=/workspace/credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/workspace/credentials.json
+      - TF_VAR_organization_id=${_ORGANIZATION_ID}
+      - TF_VAR_folder_id=${_FOLDER_ID}
+      - TF_VAR_billing_account=${_BILLING_ACCOUNT}
+      - TF_VAR_default_service_account=${_DEFAULT_SERVICE_ACCOUNT}
+      - TF_VAR_project_name=${_PROJECT_NAME}
+      - TF_VAR_credentials_path=/workspace/credentials.json
+
+    args:
+      - '-c'
+      - |
+        cd examples/simple_project
+        terraform apply -auto-approve
+
